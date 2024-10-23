@@ -20,8 +20,10 @@ from sklearn.metrics import confusion_matrix, classification_report
 IMAGE_DIR = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/auxiliary_network_pics/cropped_labelled_auxiliary_network_pics/'
 TRAIN_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_train.txt'
 VAL_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_val.txt'
+TEST_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_test.txt'
+
 BATCH_SIZE = 64
-NUM_EPOCHS = 30
+NUM_EPOCHS = 2
 # NUM_EPOCHS = 50
 NUM_CLASSES = 4
 # LEARNING_RATE = 0.001
@@ -67,9 +69,11 @@ data_transforms = transforms.Compose([
 # Create datasets and dataloaders
 train_dataset = StoatDataset(IMAGE_DIR, TRAIN_LABEL_FILE, transform=data_transforms)
 val_dataset = StoatDataset(IMAGE_DIR, VAL_LABEL_FILE, transform=data_transforms)
+test_dataset = StoatDataset(IMAGE_DIR, TEST_LABEL_FILE, transform=data_transforms)
 
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # Load pre-trained ResNet50 model
 model = models.resnet50(pretrained=True)
@@ -79,7 +83,7 @@ num_ftrs = model.fc.in_features
 model.fc = nn.Linear(num_ftrs, NUM_CLASSES)
 
 # Move model to GPU if available
-device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
 
 # Define loss function and optimizer
@@ -88,6 +92,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 # Initialize lists to store metrics
 train_losses = []
+val_losses = []
 val_accuracies = []
 
 # Training loop
@@ -112,6 +117,7 @@ for epoch in range(NUM_EPOCHS):
 
     # Validation loop
     model.eval()
+    val_running_loss = 0.0
     correct = 0
     total = 0
     with torch.no_grad():
@@ -119,12 +125,16 @@ for epoch in range(NUM_EPOCHS):
             inputs = inputs.to(device)
             labels = labels.to(device)
             outputs = model(inputs)
+            loss = criterion(outputs, labels)  # Compute validation loss
+            val_running_loss += loss.item() * inputs.size(0)
             _, preds = torch.max(outputs, 1)
             correct += torch.sum(preds == labels)
             total += labels.size(0)
+    val_epoch_loss = val_running_loss / len(val_dataset)  # Compute average validation loss
+    val_losses.append(val_epoch_loss)
     accuracy = correct.double() / total
     val_accuracies.append(accuracy.item())
-    print(f"Epoch {epoch+1}/{NUM_EPOCHS}, Validation Accuracy: {accuracy:.4f}")
+    print(f"Epoch {epoch+1}/{NUM_EPOCHS}, Validation Loss: {val_epoch_loss:.4f}, Validation Accuracy: {accuracy:.4f}")
 
 #######################################################################################
 # Define output directory (relative to the parent directory of the script)
@@ -142,6 +152,16 @@ plt.xlabel("Epochs")
 plt.ylabel("Loss")
 plt.legend()
 plt.savefig(os.path.join(output_dir, f"training_loss_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.pdf"))  # Save as PDF
+plt.close()  # Close the figure to avoid display
+
+# Plot and save Validation Loss as PDF in the output folder
+plt.figure(figsize=(10,5))
+plt.title("Validation Loss Over Epochs")
+plt.plot(range(1, NUM_EPOCHS+1), val_losses, label="Validation Loss")
+plt.xlabel("Epochs")
+plt.ylabel("Loss")
+plt.legend()
+plt.savefig(os.path.join(output_dir, f"validation_loss_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.pdf"))  # Save as PDF
 plt.close()  # Close the figure to avoid display
 
 # Plot and save Validation Accuracy as PDF in the output folder
@@ -162,7 +182,7 @@ all_image_names = []
 
 model.eval()
 with torch.no_grad():
-    for inputs, labels, image_names in tqdm(val_loader, desc="Generating Predictions"):
+    for inputs, labels, image_names in tqdm(val_loader, desc="Generating Predictions on Validation Set"):
         inputs = inputs.to(device)
         labels = labels.to(device)
         outputs = model(inputs)
@@ -189,20 +209,79 @@ print(results_df.head())
 # Save predictions CSV in the output folder
 results_df.to_csv(os.path.join(output_dir, f'model_predictions_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.csv'), index=False)
 
-# Compute confusion matrix
-cm = confusion_matrix(all_labels, all_preds)
+# # Compute confusion matrix
+# cm = confusion_matrix(all_labels, all_preds)
 
-# Plot confusion matrix and save as PDF in the output folder
+# # Plot confusion matrix and save as PDF in the output folder
+# plt.figure(figsize=(8,6))
+# sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+#             xticklabels=[label_mapping[i] for i in range(NUM_CLASSES)],
+#             yticklabels=[label_mapping[i] for i in range(NUM_CLASSES)])
+# plt.ylabel('True Label')
+# plt.xlabel('Predicted Label')
+# plt.title('Confusion Matrix')
+# plt.savefig(os.path.join(output_dir, f"confusion_matrix_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.pdf"))  # Save as PDF
+# plt.close()  # Close the figure to avoid display
+
+# Print classification report
+# print("Classification Report:")
+# print(classification_report(all_labels, all_preds, target_names=[label_mapping[i] for i in range(NUM_CLASSES)]))
+
+#############################################################################################
+# =========================================
+# Evaluate the Model on the Test Dataset
+# =========================================
+
+# Collect all predictions and true labels on the test set
+test_preds = []
+test_labels = []
+test_image_names = []
+
+model.eval()
+with torch.no_grad():
+    for inputs, labels, image_names in tqdm(test_loader, desc="Evaluating on Test Dataset"):
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+        outputs = model(inputs)
+        _, preds = torch.max(outputs, 1)
+        test_preds.extend(preds.cpu().numpy())
+        test_labels.extend(labels.cpu().numpy())
+        test_image_names.extend(image_names)
+
+# Compute test accuracy
+test_correct = np.sum(np.array(test_preds) == np.array(test_labels))
+test_total = len(test_labels)
+test_accuracy = test_correct / test_total
+print(f"Test Accuracy: {test_accuracy:.4f}")
+
+# Create a DataFrame to store test results
+test_results_df = pd.DataFrame({
+    'Image': test_image_names,
+    'True Label': test_labels,
+    'Predicted Label': test_preds
+})
+
+# Map numeric labels to actual position labels
+test_results_df['True Label Name'] = test_results_df['True Label'].map(label_mapping)
+test_results_df['Predicted Label Name'] = test_results_df['Predicted Label'].map(label_mapping)
+
+# Save test predictions CSV in the output folder
+test_results_df.to_csv(os.path.join(output_dir, f'test_predictions_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.csv'), index=False)
+
+# Compute confusion matrix on test set
+test_cm = confusion_matrix(test_labels, test_preds)
+
+# Plot confusion matrix for test set and save as PDF in the output folder
 plt.figure(figsize=(8,6))
-sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+sns.heatmap(test_cm, annot=True, fmt='d', cmap='Blues',
             xticklabels=[label_mapping[i] for i in range(NUM_CLASSES)],
             yticklabels=[label_mapping[i] for i in range(NUM_CLASSES)])
 plt.ylabel('True Label')
 plt.xlabel('Predicted Label')
-plt.title('Confusion Matrix')
-plt.savefig(os.path.join(output_dir, f"confusion_matrix_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.pdf"))  # Save as PDF
+plt.title('Confusion Matrix on Test Set')
+plt.savefig(os.path.join(output_dir, f"test_confusion_matrix_{NUM_EPOCHS}_epochs_{BATCH_SIZE}_{LEARNING_RATE}_batch.pdf"))  # Save as PDF
 plt.close()  # Close the figure to avoid display
 
-# Print classification report
-print("Classification Report:")
-print(classification_report(all_labels, all_preds, target_names=[label_mapping[i] for i in range(NUM_CLASSES)]))
+# Print classification report for test set
+print("Classification Report on Test Set:")
+print(classification_report(test_labels, test_preds, target_names=[label_mapping[i] for i in range(NUM_CLASSES)]))
