@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 from ultralytics import YOLO
 
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+
 def save_detection_results(output_dir, image_paths, predictions, save_labels=False):
     no_detections_dir = os.path.join(output_dir, "No_Detections")
     os.makedirs(no_detections_dir, exist_ok = True)
@@ -123,18 +125,18 @@ def main():
     DEVICE = torch.device("cuda")
     batch_size = 256
     # yolo = YOLO("Finetune_best.pt").to(DEVICE)
-    yolo = YOLO("/raid/yil708/stoat_data/auxiliary_network_code/Finetune_best.pt").to(DEVICE)
+    yolo = YOLO("/data/yil708/Meta_Data/MetaData/auxiliary_network_code/Finetune_best.pt").to(DEVICE)
 
     # Construct the source path.
     # root = "/raid/ywu840/NewZealandData/Stoat/Stoat_Coal"
-    root = "/raid/yil708/stoat_data/auxiliary_network_pics/labelled_auxiliary_network_pics/labelled_auxiliary_network_pics"
+    root = "/data/yil708/Meta_Data/MetaData/auxiliary_network_code/"
     # source_dir = "Images"
-    source_dir = "test"
+    source_dir = "/data/yil708/Meta_Data/MetaData/auxiliary_network_code/auxiliary_network_pics/labelled_auxiliary_network_pics"
     source_path = os.path.join(root, source_dir)
     
     # Construct the destination path.
     # destination_dir = "Images_Results"
-    destination_dir = "test_Results"
+    destination_dir = "/data/yil708/Meta_Data/MetaData/auxiliary_network_code/auxiliary_network_pics/cropped_labelled_anpics"
     destination_path = os.path.join(root, destination_dir)
     os.makedirs(destination_path, exist_ok = True)
 

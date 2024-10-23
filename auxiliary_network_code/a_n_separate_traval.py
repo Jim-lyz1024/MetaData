@@ -17,12 +17,12 @@ from torchvision import models, transforms
 from sklearn.metrics import confusion_matrix, classification_report
 
 # Define constants
-IMAGE_DIR = '/raid/yil708/stoat_data/auxiliary_network_pics/labelled_auxiliary_network_pics/labelled_auxiliary_network_pics/'
-TRAIN_LABEL_FILE = '/raid/yil708/stoat_data/auxiliary_network_code/labelled_stoat_train.txt'
-VAL_LABEL_FILE = '/raid/yil708/stoat_data/auxiliary_network_code/labelled_stoat_val.txt'
+IMAGE_DIR = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/auxiliary_network_pics/cropped_labelled_auxiliary_network_pics/'
+TRAIN_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_train.txt'
+VAL_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_val.txt'
 BATCH_SIZE = 64
-# NUM_EPOCHS = 10
-NUM_EPOCHS = 50
+NUM_EPOCHS = 30
+# NUM_EPOCHS = 50
 NUM_CLASSES = 4
 # LEARNING_RATE = 0.001
 LEARNING_RATE = 0.0001
