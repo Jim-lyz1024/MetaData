@@ -1,3 +1,4 @@
 *.pt
 output
 auxiliary_network_pics
+wandb/*
