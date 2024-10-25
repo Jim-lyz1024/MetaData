@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime
 
 # Define the directory with the images
-image_dir = '/raid/yil708/stoat_data/auxiliary_network_pics/labelled_auxiliary_network_pics/labelled_auxiliary_network_pics/'
+image_dir = '/data/yil708/Meta_Data/MetaData/meta_data_images/Cat/'
 
 # List to store the extracted data
 image_data = []
@@ -37,8 +37,14 @@ for image_name in os.listdir(image_dir):
 # Convert the data into a pandas DataFrame
 df = pd.DataFrame(image_data, columns=['Image Name', 'Date', 'Time'])
 
-# Save the DataFrame to an Excel file
-output_excel_path = 'image_capture_times_with_missing.xlsx'
-df.to_excel(output_excel_path, index=False)
+# Save the DataFrame to a CSV file
+output_csv_path = 'image_capture_times_with_missing.csv'
+df.to_csv(output_csv_path, index=False)
 
-print(f"Image capture times (including missing) saved to {output_excel_path}")
+print(f"Image capture times (including missing) saved to {output_csv_path}")
+
+# # Save the DataFrame to an Excel file
+# output_excel_path = 'image_capture_times_with_missing.xlsx'
+# df.to_excel(output_excel_path, index=False)
+
+# print(f"Image capture times (including missing) saved to {output_excel_path}")
