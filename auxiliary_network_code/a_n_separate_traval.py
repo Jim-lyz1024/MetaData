@@ -22,9 +22,9 @@ TRAIN_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/label
 VAL_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_val.txt'
 TEST_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_test.txt'
 
-BATCH_SIZE = 64
-NUM_EPOCHS = 2
-# NUM_EPOCHS = 50
+BATCH_SIZE = 32
+# NUM_EPOCHS = 2
+NUM_EPOCHS = 50
 NUM_CLASSES = 4
 # LEARNING_RATE = 0.001
 LEARNING_RATE = 0.0001
@@ -83,7 +83,7 @@ num_ftrs = model.fc.in_features
 model.fc = nn.Linear(num_ftrs, NUM_CLASSES)
 
 # Move model to GPU if available
-device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
 
 # Define loss function and optimizer
