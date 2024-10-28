@@ -23,8 +23,8 @@ VAL_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelle
 TEST_LABEL_FILE = '/data/yil708/Meta_Data/MetaData/auxiliary_network_code/labelled_stoat_test.txt'
 
 BATCH_SIZE = 32
-# NUM_EPOCHS = 2
-NUM_EPOCHS = 50
+NUM_EPOCHS = 10
+# NUM_EPOCHS = 50
 NUM_CLASSES = 4
 # LEARNING_RATE = 0.001
 LEARNING_RATE = 0.0001
