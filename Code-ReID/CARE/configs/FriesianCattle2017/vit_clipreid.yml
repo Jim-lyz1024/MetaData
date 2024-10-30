@@ -74,7 +74,7 @@ DATASETS:
   #  ROOT_DIR: ('/data/ywu840/dissertation')
    ROOT_DIR: ('D:\yil708\meta_data_all\MetaData\Code-ReID\CARE\data')
 # OUTPUT_DIR: '/data/ywu840/dissertation/scripts/FriesianCattle2017/CoCoOp'
-OUTPUT_DIR: 'D:\yil708\meta_data_all\MetaData\Code-ReID\CARE\scriptsFriesianCattle2017\CoCoOp'
+OUTPUT_DIR: 'D:\yil708\meta_data_all\MetaData\Code-ReID\CARE\scripts\FriesianCattle2017\CoCoOp'
 
 
 
