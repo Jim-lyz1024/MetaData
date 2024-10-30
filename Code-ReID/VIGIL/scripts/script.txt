@@ -1,0 +1,12 @@
+# ERM
+python train.py --gpu 0 --seed 134 --output-dir output/BOKD_Test --dataset PACS --source-domains cartoon photo sketch --target-domains art_painting --model ERM --model-config-file config/erm.yaml
+
+# LGDS
+python train.py --gpu 0 --seed 134 --output-dir output/LGDS-ViTB32-OfficeHome-art --dataset OfficeHome --source-domains clipart product real_world --target-domains art --model LGDS --model-config-file config/lgds.yaml
+python train.py --gpu 0 --seed 134 --output-dir output/BOKD_Test --dataset PACS --source-domains cartoon photo sketch --target-domains art_painting --model LGDS --model-config-file config/lgds.yaml
+
+# BOLD
+python train.py --gpu 1 --seed 134 --output-dir output/BOLD_Test --dataset PACS --source-domains cartoon photo sketch --target-domains art_painting --model BOLD --model-config-file config/bold.yaml
+
+python train.py --gpu 1 --seed 134 --output-dir output/BOLD_Test --dataset PACS --source-domains cartoon photo sketch --target-domains art_painting --model RISE --model-config-file config/rise.yaml
+
