@@ -91,7 +91,7 @@ def train():
     model.fc = nn.Linear(num_ftrs, config.NUM_CLASSES)
 
     # Move model to GPU if available
-    device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
 
     # Define loss function and optimizer
@@ -144,12 +144,34 @@ def train():
         val_accuracies.append(accuracy.item())
         print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}, Validation Loss: {val_epoch_loss:.4f}, Validation Accuracy: {accuracy:.4f}")
 
+        test_preds = []
+        test_labels = []
+        test_image_names = []
+
+        model.eval()
+        with torch.no_grad():
+            for inputs, labels, image_names in tqdm(test_loader, desc="Evaluating on Test Dataset"):
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+                outputs = model(inputs)
+                _, preds = torch.max(outputs, 1)
+                test_preds.extend(preds.cpu().numpy())
+                test_labels.extend(labels.cpu().numpy())
+                test_image_names.extend(image_names)
+
+        # Compute test accuracy
+        test_correct = np.sum(np.array(test_preds) == np.array(test_labels))
+        test_total = len(test_labels)
+        test_accuracy = test_correct / test_total
+        print(f"Epoch {epoch+1}/{config.NUM_EPOCHS}, Test Accuracy: {test_accuracy:.4f}")
+        
         # Log metrics to wandb
         wandb.log({
             'epoch': epoch + 1,
             'train_loss': epoch_loss,
             'val_loss': val_epoch_loss,
             'val_accuracy': accuracy.item(),
+            'test_accuracy': test_accuracy,
             'learning_rate': config.LEARNING_RATE
         })
 
@@ -276,11 +298,11 @@ def train():
     # Compute test accuracy
     test_correct = np.sum(np.array(test_preds) == np.array(test_labels))
     test_total = len(test_labels)
-    test_accuracy = test_correct / test_total
-    print(f"Test Accuracy: {test_accuracy:.4f}")
+    test_accuracy_final = test_correct / test_total
+    print(f"Test Accuracy: {test_accuracy_final:.4f}")
 
     # Log test accuracy to wandb
-    wandb.log({'test_accuracy': test_accuracy})
+    wandb.log({'test_accuracy_final': test_accuracy_final})
 
     # Create a DataFrame to store test results
     test_results_df = pd.DataFrame({
@@ -328,7 +350,7 @@ def train():
 sweep_config = {
     'method': 'grid',  # Can be 'grid', 'random', or 'bayes'
     'metric': {
-        'name': 'test_accuracy',
+        'name': 'test_accuracy_final',
         'goal': 'maximize'  # Use 'minimize' if optimizing loss
     },
     'parameters': {
@@ -339,7 +361,7 @@ sweep_config = {
             'values': [0.01, 1e-3, 1e-4, 1e-5]
         },
         'NUM_EPOCHS': {
-            'values': [10, 20, 30, 50]
+            'values': [10, 50, 75]
         }
     }
 }
