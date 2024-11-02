@@ -3,7 +3,7 @@ import os
 import torch
 import torch.nn as nn
 from utils.meter import AverageMeter
-from torch.cuda import amp
+# from torch.cuda import amp
 import torch.distributed as dist
 import collections
 from torch.nn import functional as F
@@ -30,9 +30,9 @@ def do_train_stage1(cfg,
             model = nn.DataParallel(model)  
 
     loss_meter = AverageMeter()
-    scaler = amp.GradScaler()
+    scaler = torch.amp.GradScaler()
     xent = SupConLoss(device)
-    
+
     # train
     import time
     from datetime import timedelta
@@ -44,7 +44,7 @@ def do_train_stage1(cfg,
         for n_iter, (img, vid, target_cam, target_view) in enumerate(train_loader_stage1):
             img = img.to(device)
             target = vid.to(device)
-            with amp.autocast(enabled=True):
+            with torch.amp.autocast("cuda", enabled=True):
                 image_feature = model(img, target, get_image = True)
                 for i, img_feat in zip(target, image_feature):
                     labels.append(i)
@@ -73,7 +73,7 @@ def do_train_stage1(cfg,
             target = labels_list[b_list]
             image_features = image_features_list[b_list]  # (batch_size, 512)
             
-            with amp.autocast(enabled=True):
+            with torch.amp.autocast("cuda", enabled=True):
                 text_features = model(label = target, get_text = True, 
                                       get_image = True, img_features = image_features)  # (batch_size, ctx_dim)
             
