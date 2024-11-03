@@ -80,3 +80,4 @@ OUTPUT_DIR: 'D:\yil708\meta_data_all\MetaData\Code-ReID\CARE\scripts\FriesianCat
 
 
 # CUDA_VISIBLE_DEVICES=1 python train_clipreid.py --config_file configs/FriesianCattle2017/vit_clipreid.yml
+# $env:CUDA_VISIBLE_DEVICES="1"; python train_clipreid.py --config_file configs/FriesianCattle2017/vit_clipreid.yml

@@ -2,6 +2,7 @@ meta_data_images/
 meta_data/
 *.zip
 Code-ReID/CARE/data
+Code-ReID/CARE/scripts
 Code-ReID/CARE/**/*.pt
 Code-ReID/CARE/**/*.pth
 
