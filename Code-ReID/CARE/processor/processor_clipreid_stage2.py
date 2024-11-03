@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from utils.meter import AverageMeter
 from utils.metrics import R1_mAP_eval
-# from torch.cuda import amp
+from torch.cuda import amp
 import torch.distributed as dist
 from torch.nn import functional as F
 from loss.supcontrast import SupConLoss
@@ -44,7 +44,7 @@ def do_train_stage2(cfg,
     acc_meter = AverageMeter()
 
     evaluator = R1_mAP_eval(num_query, dataset_name=cfg.DATASETS.NAMES, max_rank=50, feat_norm=cfg.TEST.FEAT_NORM)
-    scaler = torch.amp.GradScaler()
+    scaler = amp.GradScaler()
     xent = SupConLoss(device)
     
     # train
@@ -66,7 +66,7 @@ def do_train_stage2(cfg,
                 l_list = torch.arange(i*batch, (i+1)* batch)
             else:
                 l_list = torch.arange(i*batch, num_classes)
-            with torch.amp.autocast("cuda", enabled=True):
+            with amp.autocast(enabled=True):
                 text_feature = get_text_feature(l_list, text_feat_dict)
                 #text_feature = model(label = l_list, get_text = True, img_features = None)
             text_features.append(text_feature.cpu())
@@ -94,7 +94,7 @@ def do_train_stage2(cfg,
                 target_view = target_view.to(device)
             else: 
                 target_view = None
-            with torch.amp.autocast("cuda", enabled=True):
+            with amp.autocast(enabled=True):
                 score, feat, image_features = model(x = img, label = target, cam_label=target_cam, view_label=target_view)
                 logits = image_features @ text_features.t()
                 loss = loss_fn(score, feat, target, target_cam, logits)
@@ -135,8 +135,6 @@ def do_train_stage2(cfg,
                     torch.save(model.state_dict(),
                                os.path.join(cfg.OUTPUT_DIR, cfg.MODEL.NAME + '_{}.pth'.format(epoch)))
             else:
-                #traced_model = torch.jit.trace(model.to("cpu"), torch.randn(2, 3, 256, 128).to("cpu"))
-                #torch.jit.save(traced_model, "CARE_Traced.pt")
                 torch.save(model.state_dict(),
                            os.path.join(cfg.OUTPUT_DIR, cfg.MODEL.NAME + '_{}.pth'.format(epoch)))
                 
@@ -160,9 +158,9 @@ def do_train_stage2(cfg,
                             evaluator.update((feat, vid, camid))
                     cmc, mAP, _, _, _, _, _ = evaluator.compute()
                     logger.info("Validation Results - Epoch: {}".format(epoch))
-                    logger.info("mAP: {:.2%}".format(mAP))
+                    logger.info("mAP: {:.1%}".format(mAP))
                     for r in [1, 5, 10]:
-                        logger.info("CMC curve, Rank-{:<3}:{:.2%}".format(r, cmc[r - 1]))
+                        logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))
                     torch.cuda.empty_cache()
             else:
                 model.eval()
@@ -181,9 +179,9 @@ def do_train_stage2(cfg,
                         evaluator.update((feat, vid, camid))
                 cmc, mAP, _, _, _, _, _ = evaluator.compute()
                 logger.info("Validation Results - Epoch: {}".format(epoch))
-                logger.info("mAP: {:.2%}".format(mAP))
+                logger.info("mAP: {:.1%}".format(mAP))
                 for r in [1, 5, 10]:
-                    logger.info("CMC curve, Rank-{:<3}:{:.2%}".format(r, cmc[r - 1]))
+                    logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))
                 torch.cuda.empty_cache()
 
     all_end_time = time.monotonic()
@@ -230,9 +228,9 @@ def do_inference(cfg,
 
     cmc, mAP, _, _, _, _, _ = evaluator.compute()
     logger.info("Validation Results ")
-    logger.info("mAP: {:.2%}".format(mAP))
+    logger.info("mAP: {:.1%}".format(mAP))
     for r in [1, 5, 10]:
-        logger.info("CMC curve, Rank-{:<3}:{:.2%}".format(r, cmc[r - 1]))
+        logger.info("CMC curve, Rank-{:<3}:{:.1%}".format(r, cmc[r - 1]))
     return cmc[0], cmc[4]
 
 
@@ -262,16 +260,15 @@ def id_context_feature(model, train_loader_stage1):
             selected_img_orig_indices = orig_index[selected_img_indices]
             for orig_i in selected_img_orig_indices:
                 selected_img = list_of_imgs[orig_i]
-                with torch.amp.autocast("cuda", enabled=True):
+                with amp.autocast(enabled=True):
                     target = torch.tensor(id).unsqueeze(0).to(device)
                     selected_img_feature = model(selected_img, target, get_image = True)
-                    #print(selected_img_feature.shape)
                 selected_img_features.append(selected_img_feature.cpu())
             
             img_features = torch.stack(selected_img_features, dim=0).cuda()
             #print(f"img_features.shape -- {img_features.shape}")
 
-            with torch.amp.autocast("cuda", enabled=True):
+            with amp.autocast(enabled=True):
                 #target = target.expand(img_features.shape[0])
                 id_text_features = []
                 for img_feature in img_features:
