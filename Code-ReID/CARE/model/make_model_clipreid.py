@@ -112,7 +112,7 @@ class build_transformer(nn.Module):
             return text_features
         
         if get_text == True:
-            prompts = self.prompt_learner(label) 
+            prompts = self.prompt_learner(label)
             text_features = self.text_encoder(prompts, self.prompt_learner.tokenized_prompts)
             return text_features
         
@@ -162,9 +162,17 @@ class build_transformer(nn.Module):
 
 
     def load_param(self, trained_path):
-        param_dict = torch.load(trained_path)
-        for i in param_dict:
-            self.state_dict()[i.replace('module.', '')].copy_(param_dict[i])
+        extension = trained_path.split(".")[-1]
+        if extension == "pth":
+            param_dict = torch.load(trained_path)
+            print(param_dict)
+            for i in param_dict:
+                self.state_dict()[i.replace('module.', '')].copy_(param_dict[i])
+        
+        else:
+            param_dict = torch.jit.load(trained_path)
+            print(param_dict)
+            
         print('Loading pretrained model from {}'.format(trained_path))
 
     def load_param_finetune(self, model_path):
@@ -275,7 +283,6 @@ class PromptLearner(nn.Module):
         self.dtype = clip_model.dtype
 
     def forward(self, label, image_features):
-        #print(f"The shape of the image_features: {image_features.shape}")
         b = label.shape[0]
         ctx = self.ctx[label]  # (batch_size, n_ctx, ctx_dim)
         #print(f"ctx -- {ctx.shape}")
