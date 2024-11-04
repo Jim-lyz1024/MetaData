@@ -1,0 +1,1 @@
+python train.py --config-file config/reid_base.yml
