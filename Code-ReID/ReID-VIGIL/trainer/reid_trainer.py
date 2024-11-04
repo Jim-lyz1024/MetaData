@@ -1,5 +1,5 @@
 # reid_trainer.py
-
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -87,7 +87,7 @@ class ReIDTrainer(TrainerBase):
         self.criterion_i2t = SupConLoss(self.device)
 
     def train_stage1(self):
-        """Train text description generator."""
+        """训练Stage 1"""
         self.prompt_learner.train()
         self.image_encoder.eval()
         self.text_encoder.eval()
@@ -96,7 +96,7 @@ class ReIDTrainer(TrainerBase):
             losses = MetricMeter()
             
             for batch_idx, data in enumerate(self.train_loader_stage1):
-                imgs = data['img'].float().to(self.device)  # Ensure float32
+                imgs = data['img'].float().to(self.device)
                 pids = data['pid'].to(self.device)
                 
                 with torch.no_grad():
@@ -115,28 +115,30 @@ class ReIDTrainer(TrainerBase):
                     print(f'Stage1 Epoch: [{epoch+1}][{batch_idx+1}/{len(self.train_loader_stage1)}]\t{losses}')
             
             self.scheduler_stage1.step()
-
+            
     def train_stage2(self):
-        """Train main model."""
+        """训练Stage 2"""
+        print("Starting Stage 2 training...")
         self.prompt_learner.eval()
         self.image_encoder.train()
         
-        best_rank1 = 0
+        best_rank1 = 0.0
+        best_map = 0.0
+        
+        # 获取所有类别的text features
+        with torch.no_grad():
+            text_features = self.get_text_features()  # [num_classes, embed_dim]
+        
         for epoch in range(self.cfg.SOLVER.STAGE2.MAX_EPOCHS):
             losses = MetricMeter()
             
+            # Training
+            self.image_encoder.train()
             for batch_idx, data in enumerate(self.train_loader_stage2):
                 imgs = data['img'].float().to(self.device)
                 pids = data['pid'].to(self.device)
                 
-                # Ensure pids are within range
-                if torch.any(pids >= self.num_classes):
-                    print(f"Warning: Found labels {pids} >= num_classes {self.num_classes}")
-                    continue
-                    
                 image_features = self.image_encoder(imgs)
-                text_features = self.get_text_features(pids)
-                
                 loss = self.compute_stage2_loss(image_features, text_features, pids)
                 
                 self.optimizer_stage2.zero_grad()
@@ -148,36 +150,135 @@ class ReIDTrainer(TrainerBase):
                 if (batch_idx + 1) % self.cfg.SOLVER.STAGE2.LOG_PERIOD == 0:
                     print(f'Stage2 Epoch: [{epoch+1}][{batch_idx+1}/{len(self.train_loader_stage2)}]\t{losses}')
             
+            # Evaluation
+            if (epoch + 1) % self.cfg.TEST.EVAL_PERIOD == 0:
+                print(f"\nEvaluating epoch {epoch+1}...")
+                metrics = self.test()
+                
+                mAP = metrics['mAP']
+                rank1 = metrics['rank1']
+                rank5 = metrics['rank5']
+                rank10 = metrics['rank10']
+                
+                print(f'Validation Results - Epoch: {epoch+1}')
+                print(f"mAP: {mAP:.1%}")
+                print(f"Rank-1: {rank1:.1%}")
+                print(f"Rank-5: {rank5:.1%}")
+                print(f"Rank-10: {rank10:.1%}")
+                
+                # Save best model
+                is_best = rank1 > best_rank1
+                if is_best:
+                    best_rank1 = rank1
+                    best_map = mAP
+                    self.save_model(
+                        epoch,
+                        self.optimizer_stage2,
+                        self.scheduler_stage2,
+                        is_best=True,
+                        best_rank1=best_rank1,
+                        best_map=best_map
+                    )
+                
+                # Regular checkpoint saving
+                if (epoch + 1) % self.cfg.SOLVER.STAGE2.CHECKPOINT_PERIOD == 0:
+                    self.save_model(
+                        epoch,
+                        self.optimizer_stage2,
+                        self.scheduler_stage2,
+                        is_best=False
+                    )
+            
+            self.scheduler_stage2.step()
+        
+        print("\nTraining completed!")
+        print(f"Best Rank-1: {best_rank1:.1%}")
+        print(f"Best mAP: {best_map:.1%}")
+        
+    def save_model(self, epoch, optimizer, scheduler, is_best=False, best_rank1=None, best_map=None):
+        """保存模型检查点"""
+        state = {
+            'state_dict': {
+                'image_encoder': self.image_encoder.state_dict(),
+                'prompt_learner': self.prompt_learner.state_dict(),
+                'text_encoder': self.text_encoder.state_dict()
+            },
+            'epoch': epoch,
+            'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict() if scheduler else None,
+            'best_rank1': best_rank1,
+            'best_map': best_map
+        }
+        
+        # 保存最新检查点
+        save_path = os.path.join(self.cfg.OUTPUT_DIR, f'checkpoint_ep{epoch+1}.pth')
+        torch.save(state, save_path)
+        print(f'Model saved to {save_path}')
+        
+        # 如果是最佳模型，额外保存一份
+        if is_best:
+            best_path = os.path.join(self.cfg.OUTPUT_DIR, 'model_best.pth')
+            torch.save(state, best_path)
+            print(f'Best model saved to {best_path}')    
+        
     @torch.no_grad()
     def test(self):
         """Test process."""
+        print('\nRunning evaluation...')
         self.image_encoder.eval()
         self.evaluator.reset()
         
+        # Get text features for all classes
+        with torch.no_grad():
+            text_features = self.get_text_features()  # [num_classes, embed_dim]
+        
         print('\nExtracting features from query set ...')
         for batch_idx, data in enumerate(self.query_loader):
-            imgs = data['img'].float().to(self.device)  # Ensure float32
-            features = self.image_encoder(imgs)
-            self.evaluator.process(features, data, is_query=True)
+            imgs = data['img'].float().to(self.device)
+            pids = data['pid']
+            camids = data['camid']
             
+            with torch.no_grad():
+                image_features = self.image_encoder(imgs)
+                if self.cfg.TEST.FEAT_NORM:
+                    image_features = F.normalize(image_features, p=2, dim=1)
+            
+            self.evaluator.process(image_features, data, is_query=True)
+                
         print('\nExtracting features from gallery set ...')
         for batch_idx, data in enumerate(self.gallery_loader):
-            imgs = data['img'].float().to(self.device)  # Ensure float32
-            features = self.image_encoder(imgs)
-            self.evaluator.process(features, data, is_gallery=True)
+            imgs = data['img'].float().to(self.device)
+            pids = data['pid']
+            camids = data['camid']
             
+            with torch.no_grad():
+                image_features = self.image_encoder(imgs)
+                if self.cfg.TEST.FEAT_NORM:
+                    image_features = F.normalize(image_features, p=2, dim=1)
+            
+            self.evaluator.process(image_features, data, is_gallery=True)
+                
         print('Computing metrics ...')
         metrics = self.evaluator.evaluate()
-        return metrics        
+        return metrics      
 
-    def get_text_features(self, pids, image_features=None):
-        """Get text features from prompt learner."""
-        if image_features is not None:
-            prompts = self.prompt_learner(pids, image_features)
+    def get_text_features(self, pids=None, image_features=None):
+        """获取text features.
+        Stage 1: 需要提供pids和image_features
+        Stage 2: 不需要参数, 返回所有类别的text features
+        """
+        if pids is not None and image_features is not None:
+            # Stage 1: 生成batch中的text features
+            batch_size = image_features.shape[0]
+            prompts = self.prompt_learner.forward_stage1(pids, image_features)
+            tokenized_prompts = self.prompt_learner.tokenized_prompts.expand(batch_size, -1)
+            text_features = self.text_encoder(prompts, tokenized_prompts)
         else:
-            prompts = self.prompt_learner(pids)
-        return self.text_encoder(prompts, self.prompt_learner.tokenized_prompts.repeat(len(pids), 1))
-
+            # Stage 2: 生成所有类别的text features
+            prompts = self.prompt_learner.forward_stage2()
+            text_features = self.text_encoder(prompts, self.prompt_learner.tokenized_prompts)
+        return text_features
+    
     def compute_stage1_loss(self, image_features, text_features, pids):
         """Compute Stage 1 loss."""
         i2t_loss = self.criterion_i2t(text_features, image_features, pids, pids)
@@ -185,28 +286,22 @@ class ReIDTrainer(TrainerBase):
         return i2t_loss + t2i_loss
 
     def compute_stage2_loss(self, image_features, text_features, pids):
-        """Compute Stage 2 loss."""
-        # Normalize features
-        image_features = F.normalize(image_features, p=2, dim=1)
-        text_features = F.normalize(text_features, p=2, dim=1)
+        """计算Stage 2的损失"""
+        # 归一化特征
+        image_features = F.normalize(image_features, p=2, dim=1)  # [batch_size, embed_dim]
+        text_features = F.normalize(text_features, p=2, dim=1)  # [num_classes, embed_dim]
         
-        # Compute logits
-        logits = image_features @ text_features.t()
+        # 计算相似度
+        sim_matrix = image_features @ text_features.t()  # [batch_size, num_classes]
         
-        # ID loss
-        id_loss = self.criterion_xent(logits, pids)
-        
-        # Triplet loss
+        # 计算损失
+        id_loss = self.criterion_xent(sim_matrix, pids)
         triplet_loss = self.criterion_triplet(image_features, pids)[0]
         
-        # Image-to-text loss
-        i2t_loss = self.criterion_i2t(image_features, text_features, pids, pids)
-        
-        # Combine losses
-        total_loss = (
+        # 计算总损失
+        loss = (
             self.cfg.MODEL.ID_LOSS_WEIGHT * id_loss +
-            self.cfg.MODEL.TRIPLET_LOSS_WEIGHT * triplet_loss + 
-            self.cfg.MODEL.I2T_LOSS_WEIGHT * i2t_loss
+            self.cfg.MODEL.TRIPLET_LOSS_WEIGHT * triplet_loss
         )
         
-        return total_loss
+        return loss

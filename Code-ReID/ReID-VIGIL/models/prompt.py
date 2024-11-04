@@ -29,75 +29,77 @@ class TextEncoder(nn.Module):
 class PromptLearner(nn.Module):
     def __init__(self, num_classes, dataset_name, clip_model):
         super().__init__()
-        
         self.device = next(clip_model.parameters()).device
-        self.n_ctx = 4  # number of context tokens
+        self.n_ctx = 4  
+        self.n_cls = num_classes
         ctx_dim = clip_model.ln_final.weight.shape[0]
         vis_dim = clip_model.visual.output_dim
         self.dtype = clip_model.dtype
         
-        # Define dataset-specific prompts
+        # 为每个类别创建上下文向量
         ctx_vectors = torch.empty(num_classes, self.n_ctx, ctx_dim, dtype=self.dtype)
         nn.init.normal_(ctx_vectors, std=0.02)
         self.ctx = nn.Parameter(ctx_vectors)
         
-        # Create prompt templates based on dataset
-        self.ctx_init = self._get_prompt_template(dataset_name)
-        
-        # Meta network for feature-guided prompt learning
+        # Meta network
         self.meta_net = nn.Sequential(OrderedDict([
             ("linear1", nn.Linear(vis_dim, vis_dim // 16)),
             ("relu", nn.ReLU(inplace=True)),
             ("linear2", nn.Linear(vis_dim // 16, ctx_dim))
         ]))
-        
-        # Tokenize prompts and move to correct device
+
+        # Prompt template
+        self.ctx_init = self._get_prompt_template(dataset_name)
         tokenized_prompts = clip.tokenize(self.ctx_init).to(self.device)
         self.register_buffer("tokenized_prompts", tokenized_prompts)
         
-        # Get embeddings
         with torch.no_grad():
             embedding = clip_model.token_embedding(self.tokenized_prompts).type(self.dtype)
         
-        # Split into prefix, suffix and register buffers
-        self.register_buffer("token_prefix", embedding[:, :5])  # SOS + "a photo of a"
-        self.register_buffer("token_suffix", embedding[:, 5+self.n_ctx:])  # EOS
+        self.register_buffer("token_prefix", embedding[:, :5])  
+        self.register_buffer("token_suffix", embedding[:, 5+self.n_ctx:])
 
+    def forward_stage1(self, pids, image_features):
+        """Stage 1: 使用图像特征指导的prompt生成"""
+        batch_size = image_features.shape[0]
         
-
-    def forward(self, label, image_features=None):
-        batch_size = label.shape[0]
+        # 生成图像引导的bias
+        bias = self.meta_net(image_features)  # [batch_size, ctx_dim]
+        bias = bias.unsqueeze(1)  # [batch_size, 1, ctx_dim]
         
-        if image_features is not None:
-            # Stage 1: Use image-guided context
-            bias = self.meta_net(image_features)
-            bias = bias.unsqueeze(1)
-            ctx = self.ctx[label] + bias
-        else:
-            # Stage 2: Use basic context
-            ctx = self.ctx[label]
-            
-        # Ensure all tensors are on the same device
-        prefix = self.token_prefix.expand(batch_size, -1, -1).to(label.device)
-        suffix = self.token_suffix.expand(batch_size, -1, -1).to(label.device)
-        ctx = ctx.to(label.device)
+        # 获取对应pid的context
+        ctx = self.ctx[pids]  # [batch_size, n_ctx, ctx_dim]
+        ctx = ctx + bias  # 添加图像引导的bias
         
-        # Ensure ctx has the correct shape
-        if ctx.dim() == 2:
-            ctx = ctx.unsqueeze(0)
-        elif ctx.dim() == 3 and ctx.size(0) == 1:
-            ctx = ctx.expand(batch_size, -1, -1)
-            
-        # Cat the full prompt
+        # 扩展prefix和suffix
+        prefix = self.token_prefix.expand(batch_size, -1, -1)
+        suffix = self.token_suffix.expand(batch_size, -1, -1)
+        
+        # 组合prompt
         prompts = torch.cat([prefix, ctx, suffix], dim=1)
         return prompts
     
+    def forward_stage2(self):
+        """Stage 2: 生成所有类别的prompts"""
+        # 使用学习到的context
+        ctx = self.ctx  # [n_cls, n_ctx, ctx_dim]
+        
+        # 扩展prefix和suffix
+        prefix = self.token_prefix.expand(self.n_cls, -1, -1)
+        suffix = self.token_suffix.expand(self.n_cls, -1, -1)
+        
+        # 组合prompt
+        prompts = torch.cat([prefix, ctx, suffix], dim=1)
+        return prompts
+    
+    def forward(self, *args, **kwargs):
+        """保持向后兼容"""
+        return self.forward_stage2()
+
     def _get_prompt_template(self, dataset_name):
-        """Get dataset-specific prompt template."""
         prompts = {
             "FriesianCattle2017": "a photo of a X X X X cattle.",
             "MPDD": "a photo of a X X X X dog.",
             "ATRW": "a photo of a X X X X tiger.",
-            # Add other datasets as needed
         }
         return prompts.get(dataset_name, "a photo of a X X X X.")
