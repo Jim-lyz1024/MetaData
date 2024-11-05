@@ -6,9 +6,7 @@ Code-ReID/CARE/scripts
 Code-ReID/CARE/**/*.pt
 Code-ReID/CARE/**/*.pth
 
-Code-ReID/VIGIL-ReID/
-
-Code-ReID/ReID-VIGIL/data
-Code-ReID/ReID-VIGIL/output
+Code-ReID/VIGIL-ReID/data
+Code-ReID/VIGIL-ReID/output
 **/.cache/**
 **/__pycache__/

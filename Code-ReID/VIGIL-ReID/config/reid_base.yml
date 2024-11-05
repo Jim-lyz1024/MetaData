@@ -1,5 +1,3 @@
-# config/reid_base.yml
-
 MODEL:
   NAME: "ReIDTrainer" 
   BACKBONE: "ViT-B/16"
