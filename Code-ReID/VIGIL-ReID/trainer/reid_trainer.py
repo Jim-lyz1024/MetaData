@@ -125,7 +125,6 @@ class ReIDTrainer(TrainerBase):
         best_rank1 = 0.0
         best_map = 0.0
         
-        # 获取所有类别的text features
         with torch.no_grad():
             text_features = self.get_text_features()  # [num_classes, embed_dim]
         
@@ -196,7 +195,6 @@ class ReIDTrainer(TrainerBase):
         print(f"Best mAP: {best_map:.1%}")
         
     def save_model(self, epoch, optimizer, scheduler, is_best=False, best_rank1=None, best_map=None):
-        """保存模型检查点"""
         state = {
             'state_dict': {
                 'image_encoder': self.image_encoder.state_dict(),
@@ -210,12 +208,10 @@ class ReIDTrainer(TrainerBase):
             'best_map': best_map
         }
         
-        # 保存最新检查点
         save_path = os.path.join(self.cfg.OUTPUT_DIR, f'checkpoint_ep{epoch+1}.pth')
         torch.save(state, save_path)
         print(f'Model saved to {save_path}')
         
-        # 如果是最佳模型，额外保存一份
         if is_best:
             best_path = os.path.join(self.cfg.OUTPUT_DIR, 'model_best.pth')
             torch.save(state, best_path)
@@ -263,18 +259,12 @@ class ReIDTrainer(TrainerBase):
         return metrics      
 
     def get_text_features(self, pids=None, image_features=None):
-        """获取text features.
-        Stage 1: 需要提供pids和image_features
-        Stage 2: 不需要参数, 返回所有类别的text features
-        """
         if pids is not None and image_features is not None:
-            # Stage 1: 生成batch中的text features
             batch_size = image_features.shape[0]
             prompts = self.prompt_learner.forward_stage1(pids, image_features)
             tokenized_prompts = self.prompt_learner.tokenized_prompts.expand(batch_size, -1)
             text_features = self.text_encoder(prompts, tokenized_prompts)
         else:
-            # Stage 2: 生成所有类别的text features
             prompts = self.prompt_learner.forward_stage2()
             text_features = self.text_encoder(prompts, self.prompt_learner.tokenized_prompts)
         return text_features
@@ -286,19 +276,14 @@ class ReIDTrainer(TrainerBase):
         return i2t_loss + t2i_loss
 
     def compute_stage2_loss(self, image_features, text_features, pids):
-        """计算Stage 2的损失"""
-        # 归一化特征
         image_features = F.normalize(image_features, p=2, dim=1)  # [batch_size, embed_dim]
         text_features = F.normalize(text_features, p=2, dim=1)  # [num_classes, embed_dim]
         
-        # 计算相似度
         sim_matrix = image_features @ text_features.t()  # [batch_size, num_classes]
         
-        # 计算损失
         id_loss = self.criterion_xent(sim_matrix, pids)
         triplet_loss = self.criterion_triplet(image_features, pids)[0]
         
-        # 计算总损失
         loss = (
             self.cfg.MODEL.ID_LOSS_WEIGHT * id_loss +
             self.cfg.MODEL.TRIPLET_LOSS_WEIGHT * triplet_loss

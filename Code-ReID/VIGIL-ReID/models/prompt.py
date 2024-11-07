@@ -36,7 +36,6 @@ class PromptLearner(nn.Module):
         vis_dim = clip_model.visual.output_dim
         self.dtype = clip_model.dtype
         
-        # 为每个类别创建上下文向量
         ctx_vectors = torch.empty(num_classes, self.n_ctx, ctx_dim, dtype=self.dtype)
         nn.init.normal_(ctx_vectors, std=0.02)
         self.ctx = nn.Parameter(ctx_vectors)
@@ -60,40 +59,30 @@ class PromptLearner(nn.Module):
         self.register_buffer("token_suffix", embedding[:, 5+self.n_ctx:])
 
     def forward_stage1(self, pids, image_features):
-        """Stage 1: 使用图像特征指导的prompt生成"""
         batch_size = image_features.shape[0]
         
-        # 生成图像引导的bias
         bias = self.meta_net(image_features)  # [batch_size, ctx_dim]
         bias = bias.unsqueeze(1)  # [batch_size, 1, ctx_dim]
         
-        # 获取对应pid的context
         ctx = self.ctx[pids]  # [batch_size, n_ctx, ctx_dim]
-        ctx = ctx + bias  # 添加图像引导的bias
+        ctx = ctx + bias  
         
-        # 扩展prefix和suffix
         prefix = self.token_prefix.expand(batch_size, -1, -1)
         suffix = self.token_suffix.expand(batch_size, -1, -1)
         
-        # 组合prompt
         prompts = torch.cat([prefix, ctx, suffix], dim=1)
         return prompts
     
     def forward_stage2(self):
-        """Stage 2: 生成所有类别的prompts"""
-        # 使用学习到的context
         ctx = self.ctx  # [n_cls, n_ctx, ctx_dim]
         
-        # 扩展prefix和suffix
         prefix = self.token_prefix.expand(self.n_cls, -1, -1)
         suffix = self.token_suffix.expand(self.n_cls, -1, -1)
         
-        # 组合prompt
         prompts = torch.cat([prefix, ctx, suffix], dim=1)
         return prompts
     
     def forward(self, *args, **kwargs):
-        """保持向后兼容"""
         return self.forward_stage2()
 
     def _get_prompt_template(self, dataset_name):
