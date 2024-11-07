@@ -15,7 +15,6 @@ class RandomIdentitySampler(Sampler):
         self.num_instances = num_instances
         self.num_pids_per_batch = batch_size // num_instances
         
-        # 构建索引字典 {pid: [indices]}
         self.pid_to_indices = {}
         for idx, item in enumerate(data_source):
             pid = item.pid
@@ -25,22 +24,19 @@ class RandomIdentitySampler(Sampler):
             
         self.pids = list(self.pid_to_indices.keys())
         
-        # 计算每个pid需要的batch数
         self.pid_batches = {}
         for pid in self.pids:
             indices = self.pid_to_indices[pid]
             num_batches = len(indices) // num_instances
-            if num_batches == 0:  # 如果实例数不足num_instances
+            if num_batches == 0:
                 num_batches = 1
             self.pid_batches[pid] = num_batches
             
-        # 计算一个epoch的总长度
         self.length = sum(self.pid_batches.values()) * num_instances
 
     def __iter__(self):
         final_idxs = []
         
-        # 为每个pid创建实例索引
         pid_indices = {}
         for pid in self.pids:
             indices = self.pid_to_indices[pid]
@@ -50,15 +46,12 @@ class RandomIdentitySampler(Sampler):
                 indices = np.random.choice(indices, size=len(indices), replace=False)
             pid_indices[pid] = list(indices)
         
-        # 打乱pid顺序
         pids = np.random.permutation(self.pids)
         
-        # 为每个batch选择pids
         current_pids = []
         for pid in pids:
             current_pids.append(pid)
             if len(current_pids) == self.num_pids_per_batch:
-                # 为每个选中的pid采样num_instances个实例
                 for pid in current_pids:
                     if len(pid_indices[pid]) < self.num_instances:
                         selected_idxs = np.random.choice(
@@ -73,7 +66,6 @@ class RandomIdentitySampler(Sampler):
                     final_idxs.extend(selected_idxs)
                 current_pids = []
         
-        # 处理剩余的pids
         if len(current_pids) > 0:
             for pid in current_pids:
                 if len(pid_indices[pid]) < self.num_instances:
@@ -86,7 +78,6 @@ class RandomIdentitySampler(Sampler):
                     selected_idxs = pid_indices[pid][:self.num_instances]
                 final_idxs.extend(selected_idxs)
         
-        # 确保所有索引都是Python int类型
         final_idxs = [int(idx) for idx in final_idxs]
         
         return iter(final_idxs)
