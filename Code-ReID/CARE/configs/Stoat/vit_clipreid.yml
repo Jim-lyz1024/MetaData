@@ -71,8 +71,8 @@ TEST:
 
 DATASETS:
    NAMES: ('stoat')
-   ROOT_DIR: ('/data/ywu840/dissertation')
-OUTPUT_DIR: '/data/ywu840/dissertation/scripts/Stoat/CoCoOp'
+   ROOT_DIR: ('D:\yil708\meta_data_all\MetaData\Code-ReID\CARE\data')
+OUTPUT_DIR: 'D:\yil708\meta_data_all\MetaData\Code-ReID\CARE\scripts\Stoat\CoCoOp'
 
 
 # CUDA_VISIBLE_DEVICES=2 python train_clipreid.py --config_file configs/Stoat/vit_clipreid.yml
