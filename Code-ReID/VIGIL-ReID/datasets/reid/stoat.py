@@ -91,7 +91,7 @@ class Stoat(ReIDDataset):
                 )
             )
             
-            print(Datum(img_path=img_path, pid=pid, camid=camid))
-            exit()
+            # print(Datum(img_path=img_path, pid=pid, camid=camid))
+            # exit()
 
         return data
